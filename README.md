@@ -113,7 +113,7 @@ Three classifiers were trained and evaluated using **5-fold Stratified Cross-Val
 
 **1. Clone the repository**
 ```bash
-git clone https://github.com/masterstraight009/titanic-survival-prediction.git
+git clone https://github.com/Masterstraight/titanic-survival-prediction.git
 cd titanic-survival-prediction
 ```
 
