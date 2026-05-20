@@ -49,15 +49,11 @@ def engineer_features(train_df, test_df):
     # --- Deck from Cabin (before dropping Cabin) ---
     combined['Deck'] = combined['Cabin'].apply(_extract_deck)
 
-    # --- Ticket frequency: passengers sharing the same ticket ---
-    combined['TicketFrequency'] = combined.groupby('Ticket')['Ticket'].transform('count')
-
     # --- Family features ---
     combined['FamilySize'] = combined['SibSp'] + combined['Parch'] + 1
     combined['IsAlone'] = (combined['FamilySize'] == 1).astype(int)
 
-    # --- Derived fare / age features ---
-    combined['FarePerPerson'] = combined['Fare'] / combined['FamilySize']
+    # --- Age flag ---
     combined['IsChild'] = (combined['Age'] < 16).astype(int)
 
     # --- Binned features ---
