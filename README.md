@@ -23,21 +23,28 @@ The [Kaggle Titanic competition](https://www.kaggle.com/competitions/titanic) is
 titanic-survival-prediction/
 │
 ├── data/
-│   ├── train.csv               # Training data (891 rows, includes 'Survived')
-│   └── test.csv                # Test data (418 rows, no 'Survived' column)
+│   ├── train.csv                     # Training data (891 rows, includes 'Survived')
+│   └── test.csv                      # Test data (418 rows, no 'Survived' column)
 │
 ├── notebooks/
-│   └── 01_eda.ipynb            # Full Exploratory Data Analysis notebook
+│   └── 01_eda.ipynb                  # Full Exploratory Data Analysis notebook
 │
 ├── src/
-│   ├── feature_engineering.py  # All feature transformations and imputation
-│   └── model.py                # Model training, CV, selection, and submission
+│   ├── feature_engineering.py        # All feature transformations and imputation
+│   └── model.py                      # Model training, CV, ensemble, and submission
 │
 ├── submission/
-│   └── submission.csv          # Final predictions ready for Kaggle upload
+│   ├── submission.csv                # v1 — baseline Random Forest
+│   ├── submission_v2.csv             # v2 — tuned XGBoost (hyperparameter search)
+│   ├── submission_v3.csv             # v3 — conservative RF, 10-fold CV
+│   ├── submission_v4_model.csv       # v4 — weighted Voting Classifier (pure model)
+│   └── submission_v4_rules.csv       # v4 — model + rule-based overrides
 │
 ├── models/
-│   └── best_model.pkl          # Saved best-performing model (joblib)
+│   ├── best_model.pkl                # v1 model
+│   ├── best_model_v2.pkl             # v2 model
+│   ├── best_model_v3.pkl             # v3 model
+│   └── best_model_v4.pkl             # v4 model (current best)
 │
 ├── plots/
 │   ├── survival_by_sex.png
@@ -46,9 +53,12 @@ titanic-survival-prediction/
 │   ├── survival_by_embarked.png
 │   ├── fare_distribution.png
 │   ├── correlation_heatmap.png
-│   └── feature_importance.png
+│   ├── feature_importance.png        # v1
+│   ├── feature_importance_v2.png
+│   ├── feature_importance_v3.png
+│   └── feature_importance_v4.png     # current
 │
-├── requirements.txt            # Python dependencies
+├── requirements.txt                  # Python dependencies
 ├── .gitignore
 └── README.md
 ```
@@ -82,30 +92,45 @@ All transformations are implemented in `src/feature_engineering.py`:
 
 | Transformation | Description |
 |----------------|-------------|
-| **Age imputation** | Missing `Age` filled with the median grouped by `Pclass` and `Sex` |
-| **Embarked imputation** | Missing `Embarked` filled with the most frequent port (mode) |
-| **Fare imputation** | Missing `Fare` filled with the global median fare |
-| **Title extraction** | Extracted from `Name` — mapped to: `Mr`, `Mrs`, `Miss`, `Master`, `Rare` |
-| **FamilySize** | `SibSp + Parch + 1` — total family members including self |
-| **IsAlone** | Binary flag: `1` if `FamilySize == 1`, else `0` |
-| **AgeBand** | `Age` binned into 5 equal-width categories (0–4) |
-| **FareBand** | `Fare` binned into 4 quantile-based categories (0–3) |
+| **Age imputation** | Missing `Age` filled with median grouped by `Pclass` and `Sex` |
+| **Embarked imputation** | Missing `Embarked` filled with mode |
+| **Fare imputation** | Missing `Fare` filled with global median |
+| **Title extraction** | Parsed from `Name` — groups: `Mr`, `Mrs`, `Miss`, `Master`, `Dr`, `Rare_F`, `Rare_M` |
+| **Deck** | First letter of `Cabin` (A–G, T); `U` for unknown (replaces dropping Cabin) |
+| **FamilySize** | `SibSp + Parch + 1` — total aboard including self |
+| **IsAlone** | `1` if `FamilySize == 1`, else `0` |
+| **IsChild** | `1` if `Age < 16`, else `0` |
+| **WomanOrChild** | `1` if `Sex == female` OR `Age < 16` — encodes "women and children first" rule |
+| **AgeBand** | `Age` binned into 5 equal-width categories |
+| **FareBand** | `Fare` binned into 4 quantile-based categories |
 | **Column drops** | `Name`, `Ticket`, `Cabin`, `PassengerId` removed |
-| **Label encoding** | `Sex`, `Embarked`, `Title` encoded with `LabelEncoder` |
+| **Label encoding** | `Sex`, `Embarked`, `Title`, `Deck` encoded with `LabelEncoder` |
+
+> Features removed after v2 overfitting analysis: `TicketFrequency`, `FarePerPerson` (added noise, hurt generalisation).
 
 ---
 
-## 🤖 Models Trained
+## 🤖 Models & Training Strategy
 
-Three classifiers were trained and evaluated using **5-fold Stratified Cross-Validation**:
+Training uses **10-fold Stratified Cross-Validation** with conservative hyperparameters to minimise the train/CV gap.
 
-| Model                | Fold 1 | Fold 2 | Fold 3 | Fold 4 | Fold 5 | **Mean Accuracy** | **Std** |
-|----------------------|--------|--------|--------|--------|--------|-------------------|---------|
-| Logistic Regression  | 0.8101 | 0.8090 | 0.7809 | 0.8034 | 0.8315 | **0.8070**        | ±0.0162 |
-| Random Forest        | 0.8101 | 0.7978 | 0.8258 | 0.8315 | 0.8371 | **0.8204** ✅     | ±0.0145 |
-| XGBoost              | 0.8268 | 0.8483 | 0.7978 | 0.8034 | 0.8258 | **0.8204**        | ±0.0182 |
+### Current model parameters (v4)
 
-> **Best model selected: Random Forest** — tied with XGBoost on mean accuracy but with lower variance (±0.0145 vs ±0.0182).
+| Model | Key Parameters |
+|---|---|
+| Logistic Regression | `C=0.1`, `max_iter=1000` |
+| Random Forest | `n_estimators=500`, `max_depth=6`, `min_samples_split=10`, `min_samples_leaf=4` |
+| XGBoost | `n_estimators=500`, `max_depth=3`, `learning_rate=0.05`, `subsample=0.8`, `colsample_bytree=0.8`, `gamma=1`, `reg_alpha=0.1` |
+| **Voting Classifier** | Soft voting, weights `[LR:2, RF:3, XGB:2]` |
+
+### v4 — 10-Fold CV Results
+
+| Model | Mean Accuracy | Std |
+|---|---|---|
+| Logistic Regression | 0.8159 | ±0.0364 |
+| Random Forest | 0.8294 | ±0.0209 |
+| XGBoost | 0.8316 | ±0.0299 |
+| **Voting Classifier** | **0.8327** ✅ | ±0.0314 |
 
 ---
 
@@ -128,12 +153,13 @@ python src/model.py
 ```
 
 This will:
-- Engineer all features from `data/train.csv` and `data/test.csv`
-- Train Logistic Regression, Random Forest, and XGBoost with 5-fold CV
-- Automatically select the best model
-- Save `submission/submission.csv` (418 rows — ready to upload to Kaggle)
-- Save `models/best_model.pkl`
-- Save `plots/feature_importance.png`
+- Engineer all features (including `WomanOrChild`, `Deck`, `IsChild`) from `data/train.csv` and `data/test.csv`
+- Evaluate Logistic Regression, Random Forest, XGBoost, and Voting Classifier with 10-fold CV
+- Fit the winning Voting Classifier on full training data
+- Save `submission/submission_v4_model.csv` — pure model predictions (418 rows)
+- Save `submission/submission_v4_rules.csv` — model + rule-based overrides
+- Save `models/best_model_v4.pkl`
+- Save `plots/feature_importance_v4.png`
 
 **4. (Optional) Run the EDA notebook**
 ```bash
@@ -142,13 +168,16 @@ jupyter notebook notebooks/01_eda.ipynb
 
 ---
 
-## 🏆 Results
+## 🏆 Kaggle Results
 
-| Submission | Model         | CV Accuracy | Kaggle Public Score |
-|------------|---------------|-------------|---------------------|
-| v1         | Random Forest | 0.8204      | *TBD after upload*  |
+| Version | Model | CV Accuracy | Kaggle Public Score | Notes |
+|---------|-------|-------------|---------------------|-------|
+| v1 | Random Forest (baseline) | 0.8204 | 0.74641 | 5-fold CV, basic features |
+| v2 | XGBoost (RandomizedSearchCV) | 0.8418 | 0.76555 | Overfit — large train/CV gap |
+| v3 | Random Forest (conservative) | 0.8327 | 0.77990 | 10-fold CV, removed noisy features |
+| v4 | Voting Classifier (weighted) | 0.8327 | *pending* | WomanOrChild feature, RF weight=3 |
 
-> Upload `submission/submission.csv` to the [Titanic competition](https://www.kaggle.com/competitions/titanic/submit) to get your public leaderboard score.
+> **Overfitting fix:** Train accuracy dropped from 0.90 (v2) to 0.86 (v3/v4), halving the train/CV gap and improving generalisation.
 
 ---
 
