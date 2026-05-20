@@ -56,6 +56,11 @@ def engineer_features(train_df, test_df):
     # --- Age flag ---
     combined['IsChild'] = (combined['Age'] < 16).astype(int)
 
+    # --- "Women and children first" — computed before Sex is encoded ---
+    combined['WomanOrChild'] = (
+        (combined['Sex'] == 'female') | (combined['Age'] < 16)
+    ).astype(int)
+
     # --- Binned features ---
     combined['AgeBand'] = pd.cut(combined['Age'], bins=5, labels=False)
     combined['FareBand'] = pd.qcut(combined['Fare'], q=4, labels=False, duplicates='drop')
