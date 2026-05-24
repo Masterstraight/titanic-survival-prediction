@@ -175,7 +175,7 @@ jupyter notebook notebooks/01_eda.ipynb
 | v1 | Random Forest (baseline) | 0.8204 | 0.74641 | 5-fold CV, basic features |
 | v2 | XGBoost (RandomizedSearchCV) | 0.8418 | 0.76555 | Overfit — large train/CV gap |
 | v3 | Random Forest (conservative) | 0.8327 | 0.77990 | 10-fold CV, removed noisy features |
-| v4 | Voting Classifier (weighted) | 0.8327 | *pending* | WomanOrChild feature, RF weight=3 |
+| v4 | Voting Classifier (weighted) | 0.8327 | 0.78942 | WomanOrChild feature, RF weight=3 |
 
 > **Overfitting fix:** Train accuracy dropped from 0.90 (v2) to 0.86 (v3/v4), halving the train/CV gap and improving generalisation.
 
